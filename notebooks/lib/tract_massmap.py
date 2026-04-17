@@ -1,5 +1,8 @@
 """Tract-level metadetect shear → gridded shear → Kaiser–Squires κ maps.
 
+Supports tangent-plane FFT binning (:func:`bin_shear_weighted`) and full-sky
+HEALPix binning (:func:`bin_shear_healpix`) with curved-sky KS (:func:`kaiser_squires_healpix`).
+
 Designed for import from notebooks and, later, cluster batch scripts. All
 state is passed in explicitly (no global CONFIG here).
 """
@@ -295,6 +298,99 @@ def bin_shear_weighted(
     return g1_map, g2_map, w_flat, hits, wcs
 
 
+def _bin_shear_healpix_arrays(
+    ra_deg: np.ndarray,
+    dec_deg: np.ndarray,
+    g1: np.ndarray,
+    g2: np.ndarray,
+    w: np.ndarray,
+    *,
+    nside: int,
+    nest: bool = True,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
+    """Weighted average of shear per HEALPix cell (nested by default). Internal array API."""
+
+    import healpy as hp
+
+    npix = hp.nside2npix(nside)
+    theta = np.deg2rad(90.0 - dec_deg)
+    phi = np.deg2rad(ra_deg)
+    ipix = hp.ang2pix(nside, theta, phi, nest=nest).astype(np.int64, copy=False)
+
+    wg1 = np.bincount(ipix, weights=w * g1, minlength=npix)
+    wg2 = np.bincount(ipix, weights=w * g2, minlength=npix)
+    w_flat = np.bincount(ipix, weights=w, minlength=npix)
+    hits = np.bincount(ipix, minlength=npix)
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        g1_map = np.where(w_flat > 0, wg1 / w_flat, 0.0)
+        g2_map = np.where(w_flat > 0, wg2 / w_flat, 0.0)
+    return g1_map, g2_map, w_flat, hits, nside
+
+
+def bin_shear_healpix(
+    shear_catalog: pa.Table,
+    *,
+    nside: int,
+    nest: bool = True,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
+    """Weighted HEALPix binning from ``object_shear``-style metadetect columns.
+
+    Uses columns ``ra``, ``dec``, ``gauss_g1``, ``gauss_g2`` and
+    ``w = 1 / (gauss_g1_g1_Cov + gauss_g2_g2_Cov)``, with ``w = 0`` where that sum is
+    non-finite or ``<= 0``.
+
+    Parameters
+    ----------
+    nside :
+        HEALPix resolution. Mean pixel spacing is ``~hp.nside2resol(nside, arcmin=True)``
+        arcminutes (e.g. ``nside=512`` → ~7′, ``nside=1024`` → ~3.4′).
+
+    Returns
+    -------
+    g1_map, g2_map, w_map, hits, nside
+        Full-sky vectors of length ``12 * nside**2``. ``w_map`` is the sum of weights
+        per pixel; ``g*`` are ``sum(w g*) / sum(w)`` where ``sum(w) > 0``, else 0.
+        ``hits`` counts sources per pixel.
+    """
+
+    required = (
+        "ra",
+        "dec",
+        "gauss_g1",
+        "gauss_g2",
+        "gauss_g1_g1_Cov",
+        "gauss_g2_g2_Cov",
+    )
+    names = shear_catalog.column_names
+    missing = [c for c in required if c not in names]
+    if missing:
+        raise ValueError(
+            "shear_catalog is missing required columns "
+            f"{missing!r}; present: {sorted(names)[:50]}{'…' if len(names) > 50 else ''}"
+        )
+
+    def col64(name: str) -> np.ndarray:
+        return (
+            shear_catalog[name]
+            .combine_chunks()
+            .to_numpy(zero_copy_only=False)
+            .astype(np.float64, copy=False)
+        )
+
+    ra_deg = col64("ra")
+    dec_deg = col64("dec")
+    g1 = col64("gauss_g1")
+    g2 = col64("gauss_g2")
+    cov_sum = col64("gauss_g1_g1_Cov") + col64("gauss_g2_g2_Cov")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        w = np.where(np.isfinite(cov_sum) & (cov_sum > 0), 1.0 / cov_sum, 0.0)
+
+    return _bin_shear_healpix_arrays(
+        ra_deg, dec_deg, g1, g2, w, nside=nside, nest=nest
+    )
+
+
 def kaiser_squires(
     g1: np.ndarray,
     g2: np.ndarray,
@@ -337,4 +433,72 @@ def kaiser_squires(
 
     kappa_e = np.real(np.fft.ifft2(kappa_e_f))
     kappa_b = np.real(np.fft.ifft2(kappa_b_f))
+    return kappa_e, kappa_b
+
+
+def kaiser_squires_healpix(
+    g1: np.ndarray,
+    g2: np.ndarray,
+    *,
+    nside: int,
+    lmax: int | None = None,
+    nest: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Curved-sky Kaiser–Squires κ_E / κ_B from HEALPix shear maps (spherical harmonics).
+
+    Uses ``healpy.map2alm_spin`` on Stokes-style maps ``(Q, U) = (g1, g2)``, applies the
+    standard spin-2 harmonic Kaiser–Squires multiplier (curved-sky lensing conventions;
+    see e.g. Hu & Okamoto 2002),
+
+    .. math::
+
+        \\kappa_{\\ell m} = -\\sqrt{\\frac{(\\ell-1)\\ell}{(\\ell+1)(\\ell+2)}}\\,
+        \\gamma^E_{\\ell m},
+
+    and the same factor on the B-mode shear channel for :math:`\\kappa_B`.
+
+    ``healpy`` spherical transforms expect **RING** ordering; nested inputs are reordered
+    internally and outputs match the ``nest`` flag.
+
+    Notes
+    -----
+    - **Partial sky:** uncorrected mode mixing and boundary effects apply where the map is
+      masked or sparse; for production on a survey mask use an iterative / MASTER-style
+      solver or Wiener methods.
+    - **Sign / Stokes convention:** weak-lensing :math:`(g_1,g_2)` vs CMB :math:`(Q,U)`
+      differ by conventions; if κ looks inconsistent with a flat-sky FFT test on a small
+      patch, try swapping the sign of ``g2`` outside this function.
+    """
+
+    import healpy as hp
+
+    npix = hp.nside2npix(nside)
+    if g1.shape != (npix,) or g2.shape != (npix,):
+        raise ValueError(
+            f"Expected full-sky HEALPix maps of length {npix}, got {g1.shape}, {g2.shape}."
+        )
+
+    if lmax is None:
+        lmax = 3 * nside - 1
+
+    g1_r = hp.reorder(g1, n2r=True) if nest else g1
+    g2_r = hp.reorder(g2, n2r=True) if nest else g2
+
+    alm_e, alm_b = hp.map2alm_spin([g1_r, g2_r], spin=2, lmax=lmax)
+
+    ell = np.arange(lmax + 1)
+    fl = np.zeros(lmax + 1)
+    m = ell >= 2
+    fl[m] = -np.sqrt(
+        (ell[m] - 1) * ell[m] / ((ell[m] + 1) * (ell[m] + 2))
+    )
+
+    kappa_e_r = hp.alm2map(hp.almxfl(alm_e, fl), nside, lmax=lmax)
+    kappa_b_r = hp.alm2map(hp.almxfl(alm_b, fl), nside, lmax=lmax)
+
+    if nest:
+        kappa_e = hp.reorder(kappa_e_r, r2n=True)
+        kappa_b = hp.reorder(kappa_b_r, r2n=True)
+    else:
+        kappa_e, kappa_b = kappa_e_r, kappa_b_r
     return kappa_e, kappa_b
