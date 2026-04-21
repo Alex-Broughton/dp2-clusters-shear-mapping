@@ -9,5 +9,3 @@ This project will produce weak-lensing mass maps and shear-peak maps, with null 
 * PUB-DB:  https://lsstdesc.slac.stanford.edu/DESCPub/app/PB/show_project?pid=492
 * A360 notebooks
 * Arun's tutorial notebook on accessing shear object tables from DP2: https://github.com/lsst-so/sciunit_wlshear/tree/main/notebooks/dp2
-
-
