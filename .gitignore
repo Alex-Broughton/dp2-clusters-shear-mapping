@@ -1,5 +1,8 @@
-_tutorials/template.ipynb
-
 # Local data (keep directory via .gitkeep)
 _data/**
 !_data/.gitkeep
+*.pdf
+*.fits
+*.csv
+*.png
+*.txt
