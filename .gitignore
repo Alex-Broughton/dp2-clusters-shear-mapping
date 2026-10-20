@@ -14,6 +14,7 @@ plots/**
 *.csv
 *.png
 *.txt
+docs/
 
 # Editor / OS clutter
 .ipynb_checkpoints/
