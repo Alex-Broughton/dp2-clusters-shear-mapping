@@ -1,9 +1,23 @@
-# Local data (keep directory via .gitkeep)
+# Repo layout:
+#   _data/   external inputs (not generated here)
+#   output/  generated tables, catalogs, and slurm logs
+#   plots/   figures (PDF)
+# Contents are kept out of git; each directory is kept via .gitkeep.
 _data/**
 !_data/.gitkeep
+output/**
+!output/.gitkeep
+plots/**
+!plots/.gitkeep
 *.pdf
 *.fits
-*.hdf5
 *.csv
 *.png
 *.txt
+
+# Editor / OS clutter
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
+.nb_backup/
+.claude/

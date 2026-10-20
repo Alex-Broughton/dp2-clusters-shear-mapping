@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt 
 import sys 
+import os
 from astropy.table import Table
 from scipy import stats
 from multiprocessing import Pool
@@ -144,8 +145,12 @@ def plot_E_B(E_mat, B_mat, tag, fits=False, zero=False):
     
     
     print("Saving figure...")
-    plt.savefig("%s_%s_b%d_Rs%d.png"%(tag0, tag, int(bin_size), int(Rs_input)) )
-    plt.savefig("%s_%s_b%d_Rs%d.pdf"%(tag0, tag, int(bin_size), int(Rs_input)) )
+    _plots_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plots")
+    os.makedirs(_plots_dir, exist_ok=True)
+    plt.savefig(
+        os.path.join(_plots_dir, "%s_%s_b%d_Rs%d.pdf" % (tag0, tag, int(bin_size), int(Rs_input))),
+        bbox_inches="tight",
+    )
 
 
     # Also, we save an (purely) image for E-mode
