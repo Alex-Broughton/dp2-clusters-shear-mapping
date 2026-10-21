@@ -70,8 +70,15 @@ CONFIG = {
     "E_SQ_MAX": 4.0,  # Maximum e1^2 + e2^2 for the HSM regauss distortion
     "T_MAX_ARCSEC2": None,  # Optional size cut on i_ixx + i_iyy; None disables it
     "PIX_SCALE_ARCSEC": 0.2,  # Arcsec per pixel, for the size cut
-    "RED_SEQ_SLOPE": 2.276,  # Red-sequence line: g-i = slope * (r-z) + intercept
-    "RED_SEQ_INTERCEPT": -0.20,  # Objects above that line are rejected
+    "RED_SEQ_SLOPE": 2.0484,  # Red-sequence line: g-i = slope * (r-z) + intercept
+    "RED_SEQ_INTERCEPT": -0.10,  # Objects above that line are rejected (dereddened colors when DEREDDEN)
+    # Milky Way dust correction, following Rubin tutorial 311.1: m_0 = m - R_band * E(B-V), with E(B-V)
+    # from the Object-table ebv column (SFD98). All color cuts use the corrected magnitudes.
+    "DEREDDEN": True,
+    "EBV_COLUMN": "ebv",
+    # R_band = A_band / E(B-V) from rubin_sim DustValues().r_x: CCM89, R_V = 3.1, flat SED, LSST baseline
+    # throughputs (rubin_sim 2.6.2, throughputs_2025_08_25).
+    "EXTINCTION_R": {"u": 4.757, "g": 3.661, "r": 2.701, "i": 2.054, "z": 1.590, "y": 1.308},
     # --- Photo-z ---------------------------------------------------------
     "Z_MIN": 0.0,  # Photo-z histogram range
     "Z_MAX": 3.0,
@@ -115,6 +122,7 @@ WANTED_COLUMNS = [
     "objectId",
     "coord_ra",
     "coord_dec",
+    "ebv",  # SFD98 E(B-V) at the object position, for the dust correction
     "detect_isDeblendedModelSource",
     "griz_model_extendedness",
     "i_hsmShapeRegauss_e1",
@@ -155,6 +163,24 @@ def flux_to_abmag(flux_njy):
     return mag
 
 
+def griz_mags(tbl):
+    """griz AB magnitudes from the Sersic fluxes, dust-corrected when CONFIG["DEREDDEN"] is set.
+
+    m_0 = m - R_band * E(B-V). Objects with a non-finite E(B-V) get NaN magnitudes and fail the color cuts.
+    """
+    mags = {b: flux_to_abmag(_col(tbl, f"{b}_sersicFlux")) for b in "griz"}
+    if not CONFIG["DEREDDEN"]:
+        return mags
+    ebv_col = CONFIG["EBV_COLUMN"]
+    if ebv_col not in tbl.colnames:
+        raise KeyError(
+            f"CONFIG['DEREDDEN'] is set but the table has no '{ebv_col}' column. "
+            "Add it to WANTED_COLUMNS or set CONFIG['DEREDDEN'] = False."
+        )
+    ebv = _col(tbl, ebv_col)
+    return {b: m - CONFIG["EXTINCTION_R"][b] * ebv for b, m in mags.items()}
+
+
 # ============================================================================
 # Source selection (carried over from the notebook / shapehsm_massmap.py)
 # ============================================================================
@@ -177,7 +203,8 @@ def selection_masks(data, flag_columns):
         reso = 1.0 - (_col(data, "i_ixxPSF") + _col(data, "i_iyyPSF")) / t_obj
     reso_ok = reso > CONFIG["RESO_FACTOR_MIN"]
 
-    mag = {b: flux_to_abmag(_col(data, f"{b}_sersicFlux")) for b in "griz"}
+    # Dust-corrected when CONFIG["DEREDDEN"]; the color cuts and red-sequence veto use these.
+    mag = griz_mags(data)
     with np.errstate(divide="ignore", invalid="ignore"):
         snr = {b: _col(data, f"{b}_sersicFlux") / _col(data, f"{b}_sersicFluxErr") for b in "griz"}
 
@@ -406,6 +433,9 @@ def resolve_columns(butler, tract):
     flag_columns = [c for c in FLAG_COLUMNS if c in names]
     missing = [c for c in WANTED_COLUMNS if c not in names]
     print("Missing columns:", missing or "none", flush=True)
+    if CONFIG["DEREDDEN"] and CONFIG["EBV_COLUMN"] not in names:
+        # Fail once here rather than once per tract inside the workers.
+        raise KeyError(f"CONFIG['DEREDDEN'] is set but the object table has no '{CONFIG['EBV_COLUMN']}' column")
     print(f"Reading {len(object_columns)} of {len(names)} columns per tract", flush=True)
     return object_columns, flag_columns
 
