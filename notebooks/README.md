@@ -35,7 +35,7 @@ The contents of all three are gitignored.
 | dp2_shearmap.ipynb | Schirmer-filtered aperture E/B maps on HEALPix for tract 9813, using HSM regauss shapes from the object table, plus peak finding | {tract}_shapeHSM_massmap.fits |
 | dp2-shear-map-tract.ipynb | Schirmer-filtered aperture E/B maps and S/N peaks for any tract (set TRACT in the parameters cell; papermill-compatible) | {tract}_shapeHSM_massmap.fits, {tract}_shapeHSM_peaks.fits |
 | dp2_shearmap_PSZ2_G309.43-72.86.ipynb | The same maps on tract 2877 around PSZ2 G309.43-72.86, with the tangential shear profile and the filter/cell-size justification | 2877_shapeHSM_massmap.fits |
-| dp2_eb_survey_properties_PSZ2_G309.43-72.86.ipynb | E- and B-mode S/N on tract 2877 against i-band survey property maps sampled on the same NSIDE=4096 cells | nothing (figures only) |
+| dp2_eb_survey_properties.ipynb | E- and B-mode S/N and aperture noise against i-band survey property maps on NSIDE=4096 cells, for every tract mass map in output/ with median \|b\| > 15° | nothing (figures only) |
 | dp2_tract_stats.ipynb | Per-tract source counts and survey property statistics (PSF size and ellipticity, depth) over the DP2 footprint | dp2_shapehsm_tract_stats.ecsv, dp2_shapehsm_tract_stats_failures.txt |
 | sky-coverage.ipynb | Source density, retained fraction, and n(z) under the shear selection cuts. python/sky_coverage.py (sh/run_sky_coverage.sh) is the batch version | dp2_coverage_summary.ecsv, dp2_coverage_nz.npz |
 | investigation_source_selection.ipynb | Object vs metadetect shear crossmatch on tract 9813 and color-color red-sequence cuts | nothing (figures only) |

@@ -12,7 +12,7 @@ $$
 
    It falls below 1 where the aperture runs off the data (tract edges without neighbor tracts, survey edges, masks) and can exceed 1 where the local density is above the mean.
 
-3. **Threshold:** $\mathcal{S}_E(p) \ge \mathcal{S}_{\min}$ (`PEAK_SN_MIN`): 4.0 in dp2_shearmap_PSZ2_G309.43-72.86, 3.5 in dp2-shear-map-tract.
+3. **Threshold:** $\mathcal{S}_E(p) \ge \mathcal{S}_{\min} = 3$ (`PEAK_SN_MIN`) in every notebook (dp2-shear-map-tract, dp2_shearmap_PSZ2_G309.43-72.86, and its binned version).
 
 4. **B-mode flag:** `B_FLAG` is true when $|\mathcal{S}_B(p)| \ge 3$ at the peak cell (`PEAK_B_SN_FLAG`).
 
