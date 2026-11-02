@@ -181,7 +181,7 @@ def create_hsp(tract_ndx, comp_g, weights, tract_pixs, inner_pixs):
     return N_gals, w, w2, g1, g2
 
 
-def process_tract(tract_ndx):
+def process_tract(tract_ndx, mask=None):
     tract_table = butler.get("object", dataId={"tract": tract_ndx, 
                                                "skymap": 'lsst_cells_v2'},
                          parameters={"columns": all_columns})
@@ -190,6 +190,9 @@ def process_tract(tract_ndx):
     rs_cut = shapeHSM_redseq_cut(tract_table)
 
     clean_hsm = tract_table[all_cuts * rs_cut]
+    if mask is not None:
+        mask_filt = mask.get_values_pos(clean_hsm['coord_ra'], clean_hsm['coord_dec'], valid_mask=True)
+        clean_hsm = clean_hsm[mask_filt]
     comp_g, weights = shear_calibration(clean_hsm)
     inner_pixs = get_inner_pixels(tract_ndx)
     tract_pixs = hp.ang2pix(4096, clean_hsm['coord_ra'], clean_hsm['coord_dec'], nest=True, lonlat=True)
@@ -207,10 +210,23 @@ def process_tract(tract_ndx):
 
 if __name__ == "__main__":
 
-    tracts = np.array([2535, 2536, 2702, 2703, 2704, 2705, 2875, 2876, 2877, 2878, 3052, 3053, 3054, 3055])
+    deep_field_tracts = {
+       'ELAIS_S1': [2535, 2536, 2702, 2703, 2704, 2705, 2875, 2876, 2877, 2878, 3052, 3053, 3054, 3055],
+       'ECDFS': [4636, 4637, 4638, 4847, 4848, 4849, 4850, 5062, 5063, 5064, 5279, 5280, 5281],
+       'COSMOS': [ 9569,  9570,  9571,  9572,  9812,  9813,  9814, 10054, 10055, 10056],
+       'EDFS': [2078, 2079, 2080, 2233, 2234, 2235, 2236, 2237, 2393, 2394, 2395, 2396, 2397, 2558, 2559, 2560, 2561, 2562, 2729, 2730]
+    }
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--field", help="Field name: ['ELAIS_S1', 'ECDFS', 'COSMOS', 'EDFS', 'WIDE']")
+    args = parser.parse_args()
+    field_name = args.field
+
+    tracts = deep_field_tracts[field_name]
+    mask = hsp.HealSparseMap.read(f'/global/cfs/cdirs/lsst/utilities/data-registry/lsst_desc_working/user/smau/rubin_dp2_{field_name.lower()}_metadetect_mask_0.2.0.hsp')
 
     for tct in tracts:
-        process_tracts(tct)
+        process_tract(tct, mask)
 
     # TO-DO: Make this actually parallelized with Butler calls...
     # with Pool(8) as p:

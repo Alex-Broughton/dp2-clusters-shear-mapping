@@ -142,10 +142,17 @@ def process_maps(coords, comp_g, g_sqr, pixs):
 
     return e_mode, b_mode, v_mode
 
-def parallel_process_maps(vpix, coords, comp_g, g_sqr):
+def parallel_process_maps(vpix, coords, comp_g, g_sqr, ktree=None):
 
-    E, B, V = compute_M_ap_at_coord(coords[vpix], coords,
-                                    comp_g, g_sqr, 0.25)
+    if ktree is None:
+        E, B, V = compute_M_ap_at_coord(coords[vpix], coords,
+                                        comp_g, g_sqr, 0.25)
+    else:
+        query_coord = np.array([coords[vpix].ra.deg, coords[vpix].dec.deg])
+        tree_filt = ktree.query_ball_point(coords[vpix], r=0.33)
+        E, B, V = compute_M_ap_at_coord(coords[vpix], coords[tree_filt],
+                                        comp_g[tree_filt], g_sqr[tree_filt], 0.25)
+        
 
     return E, B, V
 

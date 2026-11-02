@@ -9,6 +9,7 @@ import scipy.stats as stats
 import importlib
 import multiprocessing
 from functools import partial
+from scipy.spatial import KDTree
 
 import os, gc, sys, argparse
 
@@ -68,8 +69,10 @@ if __name__ == "__main__":
 
     coords, comp_g, g_sqr = smf.prep_hsp_maps(g1, g2, w, w2)
     full_pixs = g1.valid_pixels
+    np_coords = np.vstack((coords.ra.deg, coords.dec.deg)).T
+    coord_tree = KDTree(np_coords)
 
-    partial_process = partial(smf.parallel_process_maps, coords=coords, comp_g=comp_g, g_sqr=g_sqr)
+    partial_process = partial(smf.parallel_process_maps, coords=coords, comp_g=comp_g, g_sqr=g_sqr, ktree=coord_tree)
     # partial_process = lambda x : smf.process_maps(coords=coords, comp_g=comp_g, g_sqr=g_sqr, pixs=x)
 
     pool_pixs = np.arange(len(full_pixs))
@@ -92,7 +95,15 @@ if __name__ == "__main__":
     # final_b = hsp.operations.sum_union(all_bs)
     # final_v = hsp.operations.sum_union(all_vs)
 
+    m_emode = hsp.HealSparseMap.make_empty(32, 4096, dtype=float)
+    m_bmode = hsp.HealSparseMap.make_empty(32, 4096, dtype=float)
+
+    m_emode[full_pixs] = all_es / np.sqrt(all_vs)
+    m_bmode[full_pixs] = all_bs / np.sqrt(all_vs)
+
     final_e.write(f'{output_dir}/{field_name}_emap.hs', clobber=True)
+    m_emode.write(f'{output_dir}/{field_name}_eSNRmap.hs', clobber=True)
     final_b.write(f'{output_dir}/{field_name}_bmap.hs', clobber=True)
+    m_bmode.write(f'{output_dir}/{field_name}_bSNRmap.hs', clobber=True)
     final_v.write(f'{output_dir}/{field_name}_vmap.hs', clobber=True)
     
