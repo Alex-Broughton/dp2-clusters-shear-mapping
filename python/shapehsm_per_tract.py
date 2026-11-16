@@ -222,7 +222,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     field_name = args.field
 
-    tracts = deep_field_tracts[field_name]
+    if field_name == 'WIDE':
+        tracts = np.load('./data/tract_list.npy')
+    else:
+        tracts = deep_field_tracts[field_name]
+
     mask = hsp.HealSparseMap.read(f'/global/cfs/cdirs/lsst/utilities/data-registry/lsst_desc_working/user/smau/rubin_dp2_{field_name.lower()}_metadetect_mask_0.2.0.hsp')
 
     for tct in tracts:

@@ -2,7 +2,6 @@
 # Adapted from Shenming's original code (schirmer_snr_weight_shenming.py
 # Use the original SNR formula of the Schirmer aperture mass
 
-
 import numpy as np
 from astropy.coordinates import SkyCoord
 import sys 
@@ -125,6 +124,8 @@ def prep_hsp_maps(g1, g2, weights, weights_sqr):
     g_sqr_hp = (g1[valid_pixs]**2 + g2[valid_pixs]**2) / (weights_sqr[valid_pixs])
     all_hp_coords = hp.pix2ang(4096, valid_pixs, nest=True, lonlat=True)
     full_hp_coords = SkyCoord(all_hp_coords[0], all_hp_coords[1], unit='degree')
+    
+    comp_g_hp = comp_g_hp.astype(np.complex64)
 
     return full_hp_coords, comp_g_hp, g_sqr_hp
 
@@ -143,16 +144,21 @@ def process_maps(coords, comp_g, g_sqr, pixs):
     return e_mode, b_mode, v_mode
 
 def parallel_process_maps(vpix, coords, comp_g, g_sqr, ktree=None):
-
     if ktree is None:
         E, B, V = compute_M_ap_at_coord(coords[vpix], coords,
                                         comp_g, g_sqr, 0.25)
     else:
         query_coord = np.array([coords[vpix].ra.deg, coords[vpix].dec.deg])
-        tree_filt = ktree.query_ball_point(coords[vpix], r=0.33)
+        tree_filt = ktree.query_ball_point(query_coord, r=0.33)
         E, B, V = compute_M_ap_at_coord(coords[vpix], coords[tree_filt],
                                         comp_g[tree_filt], g_sqr[tree_filt], 0.25)
         
 
     return E, B, V
 
+def hsp_circle_pixels(nside_in, ipix, nside_out, rad=0.25):
+    # Return the pixels (at nside_out) of a circle centered at ipix (defined at nside_in)
+    kr, kd = hp.pix2ang(nside=nside_in, ipix=ipix, nest=True, lonlat=True)
+    k_circ = hsp.geom.Circle(ra=kr, dec=kd, radius=rad, value=True)
+    k_pixs = k_circ.get_pixels(nside=nside_out)
+    return k_pixs
